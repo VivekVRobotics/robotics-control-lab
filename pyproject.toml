@@ -4,18 +4,25 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "robotics-control-lab"
-version = "0.2.0"
-description = "A testable robotics lab covering kinematics, dynamics, control, trajectories, simulation, and visualization."
+version = "0.3.0"
+description = "A transparent, testable robotics laboratory for kinematics, dynamics, planning, control, simulation, safety, and numerical validation."
 requires-python = ">=3.10"
 dependencies = ["numpy>=1.24"]
 
 [project.optional-dependencies]
 visualization = ["matplotlib>=3.7"]
-dev = ["pytest>=8", "matplotlib>=3.7"]
+dev = ["pytest>=8", "pytest-cov>=5", "ruff>=0.6", "matplotlib>=3.7"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+addopts = "--strict-markers"
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
