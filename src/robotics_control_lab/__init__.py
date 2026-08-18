@@ -11,9 +11,10 @@ from .jacobian import is_singular, jacobian, manipulability
 from .manipulator3d import Serial3R
 from .mpc import MPCResult, linear_mpc
 from .observers import momentum_disturbance_estimate, residual_gate
+from .operational_space import operational_space_inertia, task_space_pd
 from .optimization import project_box_qp, smooth_path
 from .pid import PIDController
-from .planning import CircleObstacle, astar, edge_collision_free, rrt
+from .planning import CircleObstacle, astar, edge_collision_free, rrt, rrt_star
 from .planar_arm import Planar2R
 from .safety import JointLimits, rate_limit
 from .se3 import adjoint, pose_error, se3, se3_exp, so3_exp, so3_log, skew, twist_hat, twist_vee
@@ -29,9 +30,8 @@ __all__ = [
     "IKResult", "cartesian_velocity_control", "damped_least_squares_ik",
     "is_singular", "jacobian", "manipulability", "Serial3R",
     "MPCResult", "linear_mpc", "momentum_disturbance_estimate", "residual_gate",
-    "project_box_qp", "smooth_path", "PIDController",
-    "CircleObstacle", "astar", "edge_collision_free", "rrt", "Planar2R",
-    "JointLimits", "rate_limit",
-    "adjoint", "pose_error", "se3", "se3_exp", "so3_exp", "so3_log", "skew", "twist_hat", "twist_vee",
-    "SimulationResult", "simulate", "cubic_interpolation", "quintic_interpolation",
+    "operational_space_inertia", "task_space_pd", "project_box_qp", "smooth_path",
+    "PIDController", "CircleObstacle", "astar", "edge_collision_free", "rrt", "rrt_star", "Planar2R",
+    "JointLimits", "rate_limit", "adjoint", "pose_error", "se3", "se3_exp", "so3_exp", "so3_log",
+    "skew", "twist_hat", "twist_vee", "SimulationResult", "simulate", "cubic_interpolation", "quintic_interpolation",
 ]
