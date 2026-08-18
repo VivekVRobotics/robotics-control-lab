@@ -1,0 +1,52 @@
+"""Discrete PID control with output and integral protection."""
+
+from dataclasses import dataclass
+
+
+@dataclass
+class PIDController:
+    """A deterministic discrete PID controller.
+
+    The integral term is clamped to prevent windup. ``step`` returns the
+    saturated control command and keeps the controller state internally.
+    """
+
+    kp: float
+    ki: float = 0.0
+    kd: float = 0.0
+    output_min: float = float("-inf")
+    output_max: float = float("inf")
+    integral_min: float = float("-inf")
+    integral_max: float = float("inf")
+
+    def __post_init__(self) -> None:
+        if self.kp < 0 or self.ki < 0 or self.kd < 0:
+            raise ValueError("PID gains must be non-negative")
+        if self.output_min > self.output_max:
+            raise ValueError("output_min must not exceed output_max")
+        if self.integral_min > self.integral_max:
+            raise ValueError("integral_min must not exceed integral_max")
+        self._integral = 0.0
+        self._previous_error: float | None = None
+
+    @property
+    def integral(self) -> float:
+        return self._integral
+
+    def reset(self) -> None:
+        self._integral = 0.0
+        self._previous_error = None
+
+    def step(self, setpoint: float, measurement: float, dt: float) -> float:
+        if dt <= 0:
+            raise ValueError("dt must be positive")
+
+        error = setpoint - measurement
+        self._integral += error * dt
+        self._integral = min(max(self._integral, self.integral_min), self.integral_max)
+
+        derivative = 0.0 if self._previous_error is None else (error - self._previous_error) / dt
+        self._previous_error = error
+
+        command = self.kp * error + self.ki * self._integral + self.kd * derivative
+        return min(max(command, self.output_min), self.output_max)
