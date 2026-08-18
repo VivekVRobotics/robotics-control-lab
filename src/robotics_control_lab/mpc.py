@@ -54,21 +54,25 @@ def linear_mpc(
     n, m = B.shape
     if A.shape != (n, n) or x.shape != (n,):
         raise ValueError("A, B, and x0 dimensions are inconsistent")
+    if not np.all(np.isfinite(A)) or not np.all(np.isfinite(B)) or not np.all(np.isfinite(x)):
+        raise ValueError("A, B, and x0 must contain finite values")
     if horizon <= 0 or max_iterations <= 0 or tolerance <= 0:
         raise ValueError("horizon, max_iterations, and tolerance must be positive")
     _symmetric_positive_semidefinite(Q, "Q")
     _symmetric_positive_semidefinite(R, "R")
     if Q.shape != (n, n) or R.shape != (m, m):
         raise ValueError("Q and R dimensions are inconsistent with A/B")
+    if not np.all(np.isfinite(Q)) or not np.all(np.isfinite(R)):
+        raise ValueError("Q and R must contain finite values")
     if ref.shape == (n,):
         ref = np.tile(ref, (horizon, 1))
-    if ref.shape != (horizon, n):
-        raise ValueError("x_ref must have shape (n,) or (horizon, n)")
+    if ref.shape != (horizon, n) or not np.all(np.isfinite(ref)):
+        raise ValueError("x_ref must be finite and have shape (n,) or (horizon, n)")
 
     lo = np.full(m, -np.inf) if u_lower is None else np.asarray(u_lower, dtype=float)
     hi = np.full(m, np.inf) if u_upper is None else np.asarray(u_upper, dtype=float)
-    if lo.shape != (m,) or hi.shape != (m,) or np.any(lo > hi) or not np.all(np.isfinite(np.concatenate((lo[np.isfinite(lo)], hi[np.isfinite(hi)])))):
-        raise ValueError("u_lower/u_upper must match input dimension and contain valid finite bounds")
+    if lo.shape != (m,) or hi.shape != (m,) or np.any(np.isnan(lo)) or np.any(np.isnan(hi)) or np.any(lo > hi):
+        raise ValueError("u_lower/u_upper must match input dimension and contain no NaN values")
     bounded = u_lower is not None or u_upper is not None
     lower = np.tile(lo, horizon)
     upper = np.tile(hi, horizon)
