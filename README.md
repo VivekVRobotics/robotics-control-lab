@@ -6,7 +6,7 @@ The goal is not to hide robotics behind a framework. The equations are implement
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)
 ![CI](https://img.shields.io/github/actions/workflow/status/VivekVRobotics/robotics-control-lab/ci.yml?branch=main&label=CI)
-![Tests](https://img.shields.io/badge/tests-15%2B-success)
+![Tests](https://img.shields.io/badge/tests-10%2B-success)
 
 ## Why this repository exists
 
