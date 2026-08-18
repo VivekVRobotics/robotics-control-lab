@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import numpy as np
+
 from .planar_arm import Planar2R
 from .simulation import SimulationResult
 
@@ -9,6 +11,15 @@ from .simulation import SimulationResult
 def plot_joint_tracking(result: SimulationResult, q_des=None, save_path: str | Path | None = None):
     """Plot joint position/velocity histories; return the Matplotlib figure."""
     import matplotlib.pyplot as plt
+
+    if result.q.ndim != 2 or result.q.shape[1] != 2 or result.qd.shape != result.q.shape:
+        raise ValueError("result must contain two-joint position and velocity histories")
+    if result.time.shape != (len(result.q),):
+        raise ValueError("result.time must align with the state history")
+    if q_des is not None:
+        q_des = np.asarray(q_des, dtype=float)
+        if q_des.shape != result.q.shape:
+            raise ValueError("q_des must match result.q shape")
 
     fig, axes = plt.subplots(2, 1, sharex=True, figsize=(9, 6))
     axes[0].plot(result.time, result.q[:, 0], label="q1")
@@ -33,13 +44,13 @@ def plot_joint_tracking(result: SimulationResult, q_des=None, save_path: str | P
 
 def plot_workspace(arm: Planar2R, samples: int = 180, save_path: str | Path | None = None):
     """Plot the reachable annulus of a planar 2R arm."""
-    import numpy as np
     import matplotlib.pyplot as plt
 
-    q = np.linspace(-np.pi, np.pi, samples)
+    if samples < 16:
+        raise ValueError("samples must be at least 16")
+    theta = np.linspace(0, 2 * np.pi, int(samples))
     outer = arm.l1 + arm.l2
     inner = abs(arm.l1 - arm.l2)
-    theta = np.linspace(0, 2 * np.pi, samples)
     fig, ax = plt.subplots(figsize=(7, 7))
     ax.plot(outer * np.cos(theta), outer * np.sin(theta), label="outer workspace")
     if inner > 0:
