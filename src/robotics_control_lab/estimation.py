@@ -1,6 +1,7 @@
 """State-estimation utilities: complementary fusion and linear Kalman filtering."""
 
 from dataclasses import dataclass
+
 import numpy as np
 
 
@@ -19,26 +20,50 @@ class LinearKalmanFilter:
         self.H = np.asarray(H, dtype=float)
         self.Q = np.asarray(Q, dtype=float)
         self.R = np.asarray(R, dtype=float)
-        self.x = np.asarray(x0, dtype=float).copy()
+        self.x = np.asarray(x0, dtype=float).reshape(-1).copy()
         self.P = np.asarray(P0, dtype=float).copy()
-        n = self.x.shape[0]
+        n = self.x.size
         if self.A.shape != (n, n) or self.Q.shape != (n, n) or self.P.shape != (n, n):
             raise ValueError("state matrices have incompatible dimensions")
+        if self.B.ndim != 2 or self.B.shape[0] != n:
+            raise ValueError("B must have shape (state_dimension, input_dimension)")
+        if self.H.ndim != 2 or self.H.shape[1] != n:
+            raise ValueError("H must have shape (measurement_dimension, state_dimension)")
+        m = self.H.shape[0]
+        if self.R.shape != (m, m):
+            raise ValueError("R must match the measurement dimension")
+        for name, matrix in (("P0", self.P), ("Q", self.Q), ("R", self.R)):
+            if not np.allclose(matrix, matrix.T, atol=1e-10):
+                raise ValueError(f"{name} must be symmetric")
+            if np.min(np.linalg.eigvalsh(matrix)) < -1e-10:
+                raise ValueError(f"{name} must be positive semidefinite")
+        if np.linalg.cholesky(self.R + 1e-12 * np.eye(m)) is None:
+            raise ValueError("R must be positive semidefinite")
 
     def predict(self, u=None) -> KalmanState:
-        u_vec = np.zeros(self.B.shape[1]) if u is None else np.asarray(u, dtype=float)
+        u_vec = np.zeros(self.B.shape[1]) if u is None else np.asarray(u, dtype=float).reshape(-1)
+        if u_vec.shape != (self.B.shape[1],):
+            raise ValueError("input has incorrect dimension")
         self.x = self.A @ self.x + self.B @ u_vec
         self.P = self.A @ self.P @ self.A.T + self.Q
+        self.P = 0.5 * (self.P + self.P.T)
         return KalmanState(self.x.copy(), self.P.copy())
 
     def update(self, z) -> KalmanState:
-        z = np.asarray(z, dtype=float)
+        z = np.asarray(z, dtype=float).reshape(-1)
+        if z.shape != (self.H.shape[0],):
+            raise ValueError("measurement has incorrect dimension")
         innovation = z - self.H @ self.x
         S = self.H @ self.P @ self.H.T + self.R
-        K = self.P @ self.H.T @ np.linalg.inv(S)
+        try:
+            K = np.linalg.solve(S, (self.P @ self.H.T).T).T
+        except np.linalg.LinAlgError as exc:
+            raise ValueError("innovation covariance is singular") from exc
         self.x = self.x + K @ innovation
         I = np.eye(self.P.shape[0])
-        self.P = (I - K @ self.H) @ self.P
+        # Joseph form preserves covariance symmetry/positive semidefiniteness better.
+        self.P = (I - K @ self.H) @ self.P @ (I - K @ self.H).T + K @ self.R @ K.T
+        self.P = 0.5 * (self.P + self.P.T)
         return KalmanState(self.x.copy(), self.P.copy())
 
 
@@ -46,5 +71,8 @@ def complementary_fusion(angle_prediction: float, angle_measurement: float, alph
     """Fuse two scalar angle estimates with wrap-aware interpolation."""
     if not 0.0 <= alpha <= 1.0:
         raise ValueError("alpha must be in [0, 1]")
+    if not np.isfinite(angle_prediction) or not np.isfinite(angle_measurement):
+        raise ValueError("angle inputs must be finite")
     error = (angle_measurement - angle_prediction + np.pi) % (2 * np.pi) - np.pi
-    return angle_prediction + alpha * error
+    fused = angle_prediction + alpha * error
+    return float((fused + np.pi) % (2 * np.pi) - np.pi)
