@@ -6,7 +6,7 @@ The goal is not to hide robotics behind a framework. The equations are implement
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)
 ![CI](https://img.shields.io/github/actions/workflow/status/VivekVRobotics/robotics-control-lab/ci.yml?branch=main&label=CI)
-![Tests](https://img.shields.io/badge/tests-10%2B-success)
+![Tests](https://img.shields.io/badge/tests-11%2B-success)
 
 ## Why this repository exists
 
@@ -58,6 +58,7 @@ robotics-control-lab/
 │   ├── architecture.md
 │   └── robotics-foundations.md
 ├── examples/
+│   ├── jacobian_singularity.py
 │   └── track_step_response.py
 ├── src/robotics_control_lab/
 │   ├── __init__.py
@@ -109,6 +110,14 @@ The experiment:
 6. writes joint-tracking and workspace plots.
 
 Generated plots are intentionally ignored by Git.
+
+## Explore singularities
+
+```bash
+python examples/jacobian_singularity.py
+```
+
+This experiment shows the analytical Jacobian and how its manipulability measure approaches zero as the arm approaches a straight configuration.
 
 ## Core API
 
