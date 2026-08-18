@@ -1,4 +1,4 @@
-"""Discrete PID control with saturation and conditional anti-windup."""
+"""Discrete PID control with output and integral protection."""
 
 from dataclasses import dataclass
 import math
@@ -6,12 +6,7 @@ import math
 
 @dataclass
 class PIDController:
-    """Deterministic discrete PID controller with output/integral limits.
-
-    When the provisional command saturates, the integral state is only allowed
-    to continue changing when that change would move the command back toward
-    the admissible output range.
-    """
+    """Deterministic discrete PID controller with bounded integral state."""
 
     kp: float
     ki: float = 0.0
@@ -52,17 +47,11 @@ class PIDController:
             raise ValueError("dt must be positive and finite")
 
         error = setpoint - measurement
-        integral_candidate = min(max(self._integral + error * dt, self.integral_min), self.integral_max)
+        self._integral += error * dt
+        self._integral = min(max(self._integral, self.integral_min), self.integral_max)
+
         derivative = 0.0 if self._previous_error is None else (error - self._previous_error) / dt
-        base = self.kp * error + self.kd * derivative
-        candidate = base + self.ki * integral_candidate
-
-        if candidate > self.output_max and error > 0:
-            integral_candidate = self._integral
-        elif candidate < self.output_min and error < 0:
-            integral_candidate = self._integral
-
-        self._integral = integral_candidate
         self._previous_error = error
-        command = base + self.ki * self._integral
+
+        command = self.kp * error + self.ki * self._integral + self.kd * derivative
         return min(max(command, self.output_min), self.output_max)
