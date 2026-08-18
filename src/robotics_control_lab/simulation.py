@@ -1,6 +1,7 @@
 """Deterministic time-domain simulation of the 2R dynamics."""
 
 from dataclasses import dataclass
+from typing import Callable
 
 import numpy as np
 
@@ -18,30 +19,37 @@ class SimulationResult:
     tau: np.ndarray
 
 
+def _validate_vector(name: str, value: np.ndarray | tuple[float, float]) -> np.ndarray:
+    array = np.asarray(value, dtype=float)
+    if array.shape != (2,) or not np.all(np.isfinite(array)):
+        raise ValueError(f"{name} must contain exactly two finite values")
+    return array.copy()
+
+
 def simulate(
     robot: TwoRRobot,
-    controller,
+    controller: Callable,
     q0: np.ndarray | tuple[float, float],
     qd0: np.ndarray | tuple[float, float],
-    q_des_fn,
+    q_des_fn: Callable,
     duration: float = 5.0,
     dt: float = 0.002,
 ) -> SimulationResult:
     """Simulate a robot under a callable controller using semi-implicit Euler.
 
-    ``q_des_fn(t)`` must return ``(q_des, qd_des[, qdd_des])``. Controllers
-    accepting a fifth argument receive the desired acceleration as well.
+    ``q_des_fn(t)`` must return ``(q_des, qd_des)`` or
+    ``(q_des, qd_des, qdd_des)``. A controller must accept the corresponding
+    four- or five-argument call; controller exceptions are never swallowed.
     """
-    if duration <= 0 or dt <= 0:
-        raise ValueError("duration and dt must be positive")
+    if duration <= 0 or dt <= 0 or not np.isfinite(duration + dt):
+        raise ValueError("duration and dt must be positive and finite")
 
-    q = np.asarray(q0, dtype=float).copy()
-    qd = np.asarray(qd0, dtype=float).copy()
-    if q.shape != (2,) or qd.shape != (2,):
-        raise ValueError("q0 and qd0 must each contain two joints")
-
+    q = _validate_vector("q0", q0)
+    qd = _validate_vector("qd0", qd0)
     steps = int(np.ceil(duration / dt))
-    time = np.linspace(0.0, duration, steps + 1)
+    time = np.minimum(np.arange(steps + 1, dtype=float) * dt, duration)
+    time[-1] = duration
+
     q_hist = np.zeros((steps + 1, 2))
     qd_hist = np.zeros((steps + 1, 2))
     qdd_hist = np.zeros((steps + 1, 2))
@@ -50,21 +58,22 @@ def simulate(
     qd_hist[0] = qd
 
     for i, t in enumerate(time[:-1]):
+        h = float(time[i + 1] - time[i])
+        if h <= 0:
+            raise RuntimeError("simulation time grid is not strictly increasing")
+
         reference = tuple(q_des_fn(float(t)))
         if len(reference) == 2:
-            q_des, qd_des = reference
-            tau = controller(q, qd, np.asarray(q_des), np.asarray(qd_des))
+            q_des, qd_des = map(lambda v: _validate_vector("reference", v), reference)
+            tau = controller(q, qd, q_des, qd_des)
         elif len(reference) == 3:
-            q_des, qd_des, qdd_des = reference
-            try:
-                tau = controller(q, qd, np.asarray(q_des), np.asarray(qd_des), np.asarray(qdd_des))
-            except TypeError:
-                tau = controller(q, qd, np.asarray(q_des), np.asarray(qd_des))
+            q_des, qd_des, qdd_des = map(lambda v: _validate_vector("reference", v), reference)
+            tau = controller(q, qd, q_des, qd_des, qdd_des)
         else:
             raise ValueError("q_des_fn must return two or three arrays")
 
+        tau = _validate_vector("controller output", tau)
         qdd = robot.acceleration(q, qd, tau)
-        h = min(dt, duration - time[i])
         qd = qd + qdd * h
         q = q + qd * h
 
