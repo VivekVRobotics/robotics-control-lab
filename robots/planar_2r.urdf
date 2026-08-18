@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<robot name="robotics_control_lab_2r">
+  <link name="base_link"/>
+  <link name="link1"><inertial><origin xyz="0.3 0 0"/><mass value="2.0"/><inertia ixx="0.01" iyy="0.06" izz="0.06"/></inertial></link>
+  <link name="link2"><inertial><origin xyz="0.2 0 0"/><mass value="1.0"/><inertia ixx="0.01" iyy="0.02" izz="0.02"/></inertial></link>
+  <joint name="joint1" type="revolute"><parent link="base_link"/><child link="link1"/><origin xyz="0 0 0"/><axis xyz="0 0 1"/><limit lower="-3.14" upper="3.14" effort="40" velocity="5"/></joint>
+  <joint name="joint2" type="revolute"><parent link="link1"/><child link="link2"/><origin xyz="0.6 0 0"/><axis xyz="0 0 1"/><limit lower="-3.14" upper="3.14" effort="40" velocity="5"/></joint>
+</robot>
