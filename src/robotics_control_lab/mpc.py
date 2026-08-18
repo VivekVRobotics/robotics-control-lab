@@ -67,9 +67,11 @@ def linear_mpc(
 
     lo = np.full(m, -np.inf) if u_lower is None else np.asarray(u_lower, dtype=float)
     hi = np.full(m, np.inf) if u_upper is None else np.asarray(u_upper, dtype=float)
-    if lo.shape != (m,) or hi.shape != (m,) or np.any(lo > hi):
-        raise ValueError("u_lower/u_upper must match input dimension and satisfy lower <= upper")
+    if lo.shape != (m,) or hi.shape != (m,) or np.any(lo > hi) or not np.all(np.isfinite(np.concatenate((lo[np.isfinite(lo)], hi[np.isfinite(hi)])))):
+        raise ValueError("u_lower/u_upper must match input dimension and contain valid finite bounds")
     bounded = u_lower is not None or u_upper is not None
+    lower = np.tile(lo, horizon)
+    upper = np.tile(hi, horizon)
 
     powers = [np.eye(n)]
     for _ in range(horizon):
@@ -92,11 +94,11 @@ def linear_mpc(
     else:
         lipschitz = float(np.max(np.linalg.eigvalsh(H)))
         step = 1.0 / max(lipschitz, 1e-12)
-        u_vec = np.clip(np.zeros(horizon * m), lo.repeat(horizon), hi.repeat(horizon))
+        u_vec = np.clip(np.zeros(horizon * m), lower, upper)
         converged = False
         for iterations in range(1, max_iterations + 1):
             gradient = H @ u_vec + g
-            updated = np.clip(u_vec - step * gradient, lo.repeat(horizon), hi.repeat(horizon))
+            updated = np.clip(u_vec - step * gradient, lower, upper)
             if np.linalg.norm(updated - u_vec, ord=np.inf) <= tolerance:
                 u_vec = updated
                 converged = True
