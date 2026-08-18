@@ -3,10 +3,6 @@
 The model uses the standard form
 
     M(q) qdd + C(q, qd) + G(q) = tau.
-
-Angles are radians, lengths are metres, masses are kilograms, and inertia is
-kg m^2. The implementation is intentionally explicit so the equations remain
-auditable for a robotics learner.
 """
 
 from dataclasses import dataclass
@@ -14,6 +10,13 @@ from dataclasses import dataclass
 import numpy as np
 
 from .planar_arm import Planar2R
+
+
+def _joint_vector(value, name: str) -> np.ndarray:
+    value = np.asarray(value, dtype=float)
+    if value.shape != (2,) or not np.all(np.isfinite(value)):
+        raise ValueError(f"{name} must contain exactly two finite values")
+    return value
 
 
 @dataclass(frozen=True)
@@ -29,6 +32,9 @@ class TwoRParameters:
     gravity: float = 9.81
 
     def validate(self, arm: Planar2R) -> None:
+        values = (self.m1, self.m2, self.lc1, self.lc2, self.i1, self.i2, self.gravity)
+        if not np.all(np.isfinite(values)):
+            raise ValueError("physical parameters must be finite")
         if min(self.m1, self.m2, self.lc1, self.lc2, self.i1, self.i2) <= 0:
             raise ValueError("masses, COM distances, and inertias must be positive")
         if self.lc1 > arm.l1 or self.lc2 > arm.l2:
@@ -45,9 +51,9 @@ class TwoRRobot:
         self.arm = arm
         self.parameters = parameters
 
-    def mass_matrix(self, q: np.ndarray | tuple[float, float]) -> np.ndarray:
+    def mass_matrix(self, q) -> np.ndarray:
         """Return the symmetric 2x2 joint-space inertia matrix M(q)."""
-        q1, q2 = np.asarray(q, dtype=float)
+        q1, q2 = _joint_vector(q, "q")
         p = self.parameters
         c2 = np.cos(q2)
         a = p.i1 + p.i2 + p.m1 * p.lc1**2
@@ -56,19 +62,16 @@ class TwoRRobot:
         m22 = p.i2 + p.m2 * p.lc2**2
         return np.array([[m11, m12], [m12, m22]], dtype=float)
 
-    def coriolis(self, q: np.ndarray | tuple[float, float], qd: np.ndarray | tuple[float, float]) -> np.ndarray:
+    def coriolis(self, q, qd) -> np.ndarray:
         """Return the Coriolis/centrifugal vector C(q, qd)."""
-        q2 = float(np.asarray(q, dtype=float)[1])
-        dq1, dq2 = np.asarray(qd, dtype=float)
-        h = -self.parameters.m2 * self.arm.l1 * self.parameters.lc2 * np.sin(q2)
-        return np.array(
-            [h * (2 * dq1 * dq2 + dq2**2), -h * dq1**2],
-            dtype=float,
-        )
+        q = _joint_vector(q, "q")
+        dq1, dq2 = _joint_vector(qd, "qd")
+        h = -self.parameters.m2 * self.arm.l1 * self.parameters.lc2 * np.sin(q[1])
+        return np.array([h * (2 * dq1 * dq2 + dq2**2), -h * dq1**2], dtype=float)
 
-    def gravity(self, q: np.ndarray | tuple[float, float]) -> np.ndarray:
+    def gravity(self, q) -> np.ndarray:
         """Return the gravity load vector G(q)."""
-        q1, q2 = np.asarray(q, dtype=float)
+        q1, q2 = _joint_vector(q, "q")
         p = self.parameters
         g = p.gravity
         return np.array(
@@ -80,15 +83,13 @@ class TwoRRobot:
             dtype=float,
         )
 
-    def acceleration(
-        self,
-        q: np.ndarray | tuple[float, float],
-        qd: np.ndarray | tuple[float, float],
-        tau: np.ndarray | tuple[float, float],
-    ) -> np.ndarray:
-        """Solve M(q) qdd = tau - C(q, qd) - G(q)."""
-        tau_vec = np.asarray(tau, dtype=float)
-        if tau_vec.shape != (2,):
-            raise ValueError("tau must contain exactly two joint torques")
+    def acceleration(self, q, qd, tau) -> np.ndarray:
+        """Solve ``M(q) qdd = tau - C(q,qd) - G(q)``."""
+        q = _joint_vector(q, "q")
+        qd = _joint_vector(qd, "qd")
+        tau_vec = _joint_vector(tau, "tau")
         rhs = tau_vec - self.coriolis(q, qd) - self.gravity(q)
-        return np.linalg.solve(self.mass_matrix(q), rhs)
+        try:
+            return np.linalg.solve(self.mass_matrix(q), rhs)
+        except np.linalg.LinAlgError as exc:
+            raise ValueError("inertia matrix is singular") from exc
