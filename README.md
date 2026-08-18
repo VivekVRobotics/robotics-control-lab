@@ -1,58 +1,71 @@
 # Robotics Control Lab
 
-A from-scratch robotics engineering laboratory focused on **kinematics, differential kinematics, inverse kinematics, rigid-body dynamics, feedback control, trajectories, numerical simulation, safety constraints, energy diagnostics, and reproducible verification**.
+A from-scratch robotics engineering laboratory covering **SE(3), screw theory, 3D serial-chain kinematics, inverse kinematics, Jacobians, rigid-body dynamics, feedback control, trajectory generation, motion planning, safety filtering, state estimation, MPC, hardware abstraction, HIL, and reproducible benchmarking**.
 
-The goal is not to hide robotics behind a framework. The equations are implemented explicitly, tested numerically, and connected into reproducible experiments.
+The goal is not to hide robotics behind a framework. Core equations are implemented explicitly, tested numerically, and connected into reproducible experiments.
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)
 ![CI](https://img.shields.io/github/actions/workflow/status/VivekVRobotics/robotics-control-lab/ci.yml?branch=main&label=CI)
 
-## Why this repository exists
-
-A strong robotics portfolio should demonstrate more than a finished robot video. It should show that the engineer understands the stack underneath the robot:
+## Architecture
 
 ```text
-rigid-body geometry
+SE(3) / twists / adjoints
         ↓
-forward / inverse kinematics
+3D serial-chain kinematics
         ↓
-Jacobian / singularity analysis
+2R analytical + numerical IK
+        ↓
+Jacobian / manipulability / singularities
         ↓
 trajectory generation
         ↓
 rigid-body dynamics
         ↓
-feedback + inverse-dynamics control
+PD / PID / computed torque
         ↓
-simulation + energy analysis
+planning: A* + RRT
         ↓
-safety constraints + verification
+path smoothing + QP safety projection
+        ↓
+state estimation + disturbance residuals
+        ↓
+linear MPC baseline
+        ↓
+hardware abstraction + HIL
+        ↓
+URDF + ROS 2 integration boundary
+        ↓
+benchmarks + sim-to-real methodology
 ```
 
-This repository is built around that progression.
-
-## Current capabilities
+## Capability map
 
 | Area | Implementation |
 |---|---|
-| Forward kinematics | Planar 2R arm |
-| Analytic inverse kinematics | Elbow-up / elbow-down |
-| Numerical inverse kinematics | Damped least squares + joint limits |
-| Workspace validation | Reachability checks |
-| Jacobian | Analytical 2×2 position Jacobian |
-| Cartesian velocity control | Damped pseudoinverse |
-| Manipulability | Yoshikawa planar measure |
-| Singularity detection | Numerical tolerance check |
-| Trajectory generation | Cubic + quintic profiles |
-| PID control | Saturation + integral bounds |
-| Joint PD | Position/velocity feedback |
-| Computed torque | Inverse-dynamics compensation |
+| SE(3) | homogeneous transforms, SO(3) exp/log |
+| Screw theory | twists, hat/vee operators, adjoint |
+| 3D manipulator | 3R screw-axis forward kinematics + space Jacobian |
+| 2R kinematics | analytic FK / IK + workspace checks |
+| Numerical IK | damped least squares + joint limits |
+| Differential kinematics | analytic Jacobian + damped pseudoinverse |
+| Singularities | manipulability + tolerance checks |
+| Trajectories | cubic + quintic profiles |
 | Dynamics | `M(q)`, `C(q,qd)`, `G(q)` |
-| Energy | Kinetic + potential + total mechanical energy |
-| Simulation | Fixed-step semi-implicit Euler |
-| Safety | Position / velocity / effort / slew-rate limiting |
-| Visualization | Optional Matplotlib plots |
-| Verification | Mathematical unit tests + lint + coverage CI |
+| Energy | kinetic + potential + total energy |
+| Controllers | PID, PD, computed torque |
+| Safety | limits, slew rate, boxed QP projection |
+| Planning | A* grid search + deterministic RRT |
+| Optimization | waypoint smoothing |
+| Estimation | linear Kalman filter + complementary fusion |
+| Disturbances | momentum residual + residual gate |
+| MPC | finite-horizon linear quadratic baseline |
+| Hardware | abstract read/write interface + simulated backend |
+| HIL | deterministic hardware cycle adapter |
+| Robot description | reference URDF |
+| ROS 2 | explicit integration boundary and interface model |
+| Identification | first-order step-response fit |
+| Verification | numerical tests + CI matrix + compile gate |
 
 ## Repository structure
 
@@ -61,26 +74,41 @@ robotics-control-lab/
 ├── .github/workflows/ci.yml
 ├── docs/
 │   ├── architecture.md
+│   ├── benchmarks.md
+│   ├── research-benchmarks.md
 │   ├── research-roadmap.md
 │   └── robotics-foundations.md
 ├── examples/
 │   ├── damped_ik_demo.py
 │   ├── jacobian_singularity.py
 │   └── track_step_response.py
+├── robots/
+│   └── planar_2r.urdf
+├── ros2/
+│   └── README.md
 ├── src/robotics_control_lab/
-│   ├── __init__.py
 │   ├── controllers.py
 │   ├── dynamics.py
 │   ├── energy.py
+│   ├── estimation.py
+│   ├── hardware.py
+│   ├── identification.py
 │   ├── ik.py
 │   ├── jacobian.py
+│   ├── manipulator3d.py
+│   ├── mpc.py
+│   ├── observers.py
+│   ├── optimization.py
 │   ├── pid.py
+│   ├── planning.py
 │   ├── planar_arm.py
 │   ├── safety.py
+│   ├── se3.py
 │   ├── simulation.py
 │   ├── trajectory.py
 │   └── visualization.py
 ├── tests/
+│   ├── test_advanced_stack.py
 │   ├── test_control.py
 │   └── test_robotics_math.py
 ├── .gitignore
@@ -103,155 +131,76 @@ pytest -q
 ruff check src tests examples
 ```
 
-## Run the flagship experiment
-
-The repository includes an end-to-end computed-torque simulation of a planar 2R robot:
+## Flagship experiments
 
 ```bash
 python examples/track_step_response.py
-```
-
-The experiment:
-
-1. builds a physical 2R robot model,
-2. generates a joint reference,
-3. closes the loop with computed-torque control,
-4. simulates the rigid-body dynamics,
-5. reports tracking error,
-6. writes joint-tracking and workspace plots.
-
-## Explore damped inverse kinematics
-
-```bash
 python examples/damped_ik_demo.py
-```
-
-This demonstrates a numerically robust alternative to closed-form IK. The solver regularizes the inverse Jacobian near singular configurations and can enforce joint limits.
-
-## Explore singularities
-
-```bash
 python examples/jacobian_singularity.py
 ```
 
-This experiment shows how the Jacobian determinant / manipulability measure approaches zero as the arm approaches a straight configuration.
+## Research-informed scope
 
-## Core API
+The stack is intentionally benchmarked against established robotics ecosystems. Modern Robotics provides a broad progression from rigid-body motion and screw theory through kinematics, Jacobians, dynamics, trajectories, and control. Drake couples multibody models with inverse kinematics, trajectory optimization, collision checking, and mathematical programming. ros2_control defines a controller/hardware architecture with explicit state and command interfaces and a controller manager separating control logic from hardware access.
 
-```python
-import numpy as np
+References:
 
-from robotics_control_lab import (
-    Planar2R,
-    TwoRParameters,
-    TwoRRobot,
-    ComputedTorqueController,
-    damped_least_squares_ik,
-    simulate,
-)
-
-arm = Planar2R(0.6, 0.4)
-robot = TwoRRobot(
-    arm,
-    TwoRParameters(m1=2.0, m2=1.0, lc1=0.3, lc2=0.2, i1=0.06, i2=0.02),
-)
-
-ik = damped_least_squares_ik(arm, target=(0.55, 0.15), q0=(0.0, 0.0))
-print(ik.q, ik.residual)
-
-controller = ComputedTorqueController(robot, kp=45.0, kd=14.0)
-target = np.array([0.4, -0.3])
-result = simulate(
-    robot,
-    controller,
-    q0=(0.0, 0.0),
-    qd0=(0.0, 0.0),
-    q_des_fn=lambda _t: (target, np.zeros(2), np.zeros(2)),
-    duration=1.5,
-    dt=0.002,
-)
-print(result.q[-1])
-```
+- Modern Robotics: https://modernrobotics.northwestern.edu/
+- Drake planning: https://drake.mit.edu/doxygen_cxx/group__planning.html
+- ros2_control: https://control.ros.org/
 
 ## Engineering quality bar
 
-The project is deliberately built around a few strict rules:
+- Equations remain visible and auditable.
+- Numerical behavior is verified independently where practical.
+- Invalid physical parameters fail early.
+- Optional production dependencies stay outside the numerical core.
+- Planning/control interfaces are deterministic and benchmarkable.
+- Safety boundaries are explicit.
+- Examples are reproducible.
+- CI spans supported Python versions and compiles the source tree.
+- Simulation results are not treated as hardware validation.
 
-- **Equations before abstractions:** robotics mathematics remains visible.
-- **Small public APIs:** modules can be tested independently.
-- **Independent numerical checks:** analytical Jacobians are compared against finite differences; dynamic matrices are checked for symmetry and positive definiteness; simulation behavior is tested end-to-end.
-- **Numerical robustness:** singularities and inverse problems use explicit tolerances and regularization.
-- **Physical safety boundaries:** joint, velocity, effort, and command slew limits are explicit rather than implicit.
-- **Fail early:** invalid physical parameters and invalid time steps raise explicit errors.
-- **No hidden visualization dependency:** numerical code remains usable without Matplotlib.
-- **Reproducible experiments:** fixed-step simulation and checked-in examples make experiments repeatable.
-- **Automated gates:** CI runs linting, tests, coverage reporting, and compilation across Python 3.10–3.12.
+## Roadmap status
 
-## Research-informed scope
+### Advanced stack
 
-The capability map deliberately follows the major topics found in modern robotics curricula—rigid-body motion, Jacobians, singularities, inverse kinematics, dynamics, trajectories, planning, and control—while taking architectural cues from established tools such as Drake and ros2_control.
+- [x] SE(3) / twists / adjoints
+- [x] 3D serial manipulator
+- [x] Numerical IK and Cartesian velocity control
+- [x] Rigid-body dynamics
+- [x] Motion planning: A* + RRT
+- [x] Trajectory smoothing
+- [x] Box-QP safety projection
+- [x] State estimation
+- [x] Disturbance residuals
+- [x] Linear MPC baseline
+- [x] URDF reference model
+- [x] ROS 2 integration boundary
+- [x] Hardware abstraction
+- [x] HIL adapter
+- [x] System-identification baseline
+- [x] Benchmark methodology
+- [x] Sim-to-real methodology
 
-Further reading:
+### Next research depth
 
-- Modern Robotics: https://modernrobotics.northwestern.edu/nu-gm-book-resource/
-- Drake: https://drake.mit.edu/
-- ros2_control: https://control.ros.org/
-
-See [research-roadmap.md](docs/research-roadmap.md) for the planned expansion into planning, optimization, state estimation, ROS 2, hardware-in-the-loop, and advanced control.
-
-## Roadmap
-
-### Phase 1 — classical robotics core
-
-- [x] Forward/inverse kinematics
-- [x] Jacobian and singularities
-- [x] Damped-least-squares IK
-- [x] Cubic / quintic trajectory generation
-- [x] PID / PD control
-- [x] 2R rigid-body dynamics
-- [x] Computed-torque control
-- [x] Deterministic simulation
-- [x] Energy diagnostics
-- [x] Safety limits
-- [x] Visualization
-
-### Phase 2 — deeper control and estimation
-
-- [ ] Cartesian PD / operational-space control
-- [ ] Feedforward trajectory acceleration from the planner
-- [ ] Runge-Kutta integrator comparison
-- [ ] Disturbance injection and robustness metrics
-- [ ] Noise models and state estimation
-- [ ] Control-effort / overshoot / settling-time benchmarking
-
-### Phase 3 — planning and optimization
-
-- [ ] Configuration-space obstacle models
-- [ ] Graph search and sampling-based planning
-- [ ] Collision checking
-- [ ] Trajectory optimization
-- [ ] Quadratic-programming safety filters
-- [ ] Null-space objectives
-
-### Phase 4 — robotics systems engineering
-
-- [ ] 3D serial manipulator model
-- [ ] URDF generation
-- [ ] ROS 2 interface layer
-- [ ] ros2_control integration boundary
-- [ ] Hardware-in-the-loop adapters
-- [ ] Encoder / actuator abstractions
-- [ ] System identification experiments
-
-### Phase 5 — advanced research track
-
-- [ ] Operational-space dynamics
-- [ ] Model predictive control experiments
-- [ ] Adaptive / robust control
-- [ ] Reinforcement-learning benchmark environment
-- [ ] Sim-to-real validation methodology
-- [ ] Comparative benchmarks against established robotics libraries
+- [ ] Full operational-space dynamics
+- [ ] Hierarchical null-space control
+- [ ] RRT* / informed sampling
+- [ ] Continuous collision geometry
+- [ ] General QP solver integration
+- [ ] Nonlinear MPC
+- [ ] Extended/unscented Kalman filtering
+- [ ] Online parameter estimation
+- [ ] Disturbance-observer closed-loop experiments
+- [ ] 6+ DOF benchmark manipulator
+- [ ] Real ROS 2 controller package
+- [ ] Real-time hardware driver
+- [ ] HIL timing/jitter metrics
+- [ ] Sim-to-real parameter randomization study
+- [ ] Comparative benchmark suite against external robotics libraries
 
 ## Scope
 
-This is an educational and research-oriented laboratory. The simulator is intentionally transparent and lightweight; it is **not** a safety-certified controller and is not a replacement for a validated industrial robotics stack.
+This is an educational and research-oriented laboratory. The simulator and safety utilities are not safety-certified and must not be used as a substitute for validated industrial robot control, real-time guarantees, or a certified safety system.
