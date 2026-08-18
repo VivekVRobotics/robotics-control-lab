@@ -1,14 +1,16 @@
-"""Discrete PID control with output and integral protection."""
+"""Discrete PID control with saturation and conditional anti-windup."""
 
 from dataclasses import dataclass
+import math
 
 
 @dataclass
 class PIDController:
-    """A deterministic discrete PID controller.
+    """Deterministic discrete PID controller with output/integral limits.
 
-    The integral term is clamped to prevent windup. ``step`` returns the
-    saturated control command and keeps the controller state internally.
+    When the provisional command saturates, the integral state is only allowed
+    to continue changing when that change would move the command back toward
+    the admissible output range.
     """
 
     kp: float
@@ -20,6 +22,9 @@ class PIDController:
     integral_max: float = float("inf")
 
     def __post_init__(self) -> None:
+        values = (self.kp, self.ki, self.kd, self.output_min, self.output_max, self.integral_min, self.integral_max)
+        if not all(math.isfinite(v) or math.isinf(v) for v in values):
+            raise ValueError("PID parameters must be numeric")
         if self.kp < 0 or self.ki < 0 or self.kd < 0:
             raise ValueError("PID gains must be non-negative")
         if self.output_min > self.output_max:
@@ -38,15 +43,26 @@ class PIDController:
         self._previous_error = None
 
     def step(self, setpoint: float, measurement: float, dt: float) -> float:
-        if dt <= 0:
-            raise ValueError("dt must be positive")
+        setpoint = float(setpoint)
+        measurement = float(measurement)
+        dt = float(dt)
+        if not math.isfinite(setpoint) or not math.isfinite(measurement):
+            raise ValueError("setpoint and measurement must be finite")
+        if not math.isfinite(dt) or dt <= 0:
+            raise ValueError("dt must be positive and finite")
 
         error = setpoint - measurement
-        self._integral += error * dt
-        self._integral = min(max(self._integral, self.integral_min), self.integral_max)
-
+        integral_candidate = min(max(self._integral + error * dt, self.integral_min), self.integral_max)
         derivative = 0.0 if self._previous_error is None else (error - self._previous_error) / dt
-        self._previous_error = error
+        base = self.kp * error + self.kd * derivative
+        candidate = base + self.ki * integral_candidate
 
-        command = self.kp * error + self.ki * self._integral + self.kd * derivative
+        if candidate > self.output_max and error > 0:
+            integral_candidate = self._integral
+        elif candidate < self.output_min and error < 0:
+            integral_candidate = self._integral
+
+        self._integral = integral_candidate
+        self._previous_error = error
+        command = base + self.ki * self._integral
         return min(max(command, self.output_min), self.output_max)
