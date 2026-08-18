@@ -1,6 +1,7 @@
-"""Small linear MPC implementation based on finite-horizon quadratic cost."""
+"""Small linear MPC implementation based on a lifted convex quadratic program."""
 
 from dataclasses import dataclass
+
 import numpy as np
 
 
@@ -9,6 +10,17 @@ class MPCResult:
     control: np.ndarray
     sequence: np.ndarray
     cost: float
+    iterations: int
+    converged: bool
+
+
+def _symmetric_positive_semidefinite(matrix: np.ndarray, name: str) -> None:
+    if matrix.ndim != 2 or matrix.shape[0] != matrix.shape[1]:
+        raise ValueError(f"{name} must be square")
+    if not np.allclose(matrix, matrix.T, atol=1e-10):
+        raise ValueError(f"{name} must be symmetric")
+    if np.min(np.linalg.eigvalsh(matrix)) < -1e-10:
+        raise ValueError(f"{name} must be positive semidefinite")
 
 
 def linear_mpc(
@@ -22,45 +34,81 @@ def linear_mpc(
     horizon: int = 10,
     u_lower: np.ndarray | None = None,
     u_upper: np.ndarray | None = None,
+    max_iterations: int = 500,
+    tolerance: float = 1e-7,
 ) -> MPCResult:
-    """Solve a finite-horizon linear quadratic MPC by direct shooting.
+    """Solve a finite-horizon linear quadratic MPC.
 
-    For portability this reference implementation enumerates the unconstrained
-    quadratic solution through the lifted least-squares system and then clips
-    each control move to box limits. It is intended as a benchmark baseline,
-    not as a replacement for a production QP solver.
+    With no bounds, the lifted QP is solved directly. With box bounds, a
+    projected-gradient method solves the actual constrained convex QP rather
+    than clipping an unconstrained solution after optimization.
     """
-    A = np.asarray(A, dtype=float); B = np.asarray(B, dtype=float)
-    x = np.asarray(x0, dtype=float).reshape(-1); ref = np.asarray(x_ref, dtype=float)
-    Q = np.asarray(Q, dtype=float); R = np.asarray(R, dtype=float)
+    A = np.asarray(A, dtype=float)
+    B = np.asarray(B, dtype=float)
+    x = np.asarray(x0, dtype=float).reshape(-1)
+    ref = np.asarray(x_ref, dtype=float)
+    Q = np.asarray(Q, dtype=float)
+    R = np.asarray(R, dtype=float)
+    if A.ndim != 2 or B.ndim != 2:
+        raise ValueError("A and B must be matrices")
     n, m = B.shape
+    if A.shape != (n, n) or x.shape != (n,):
+        raise ValueError("A, B, and x0 dimensions are inconsistent")
+    if horizon <= 0 or max_iterations <= 0 or tolerance <= 0:
+        raise ValueError("horizon, max_iterations, and tolerance must be positive")
+    _symmetric_positive_semidefinite(Q, "Q")
+    _symmetric_positive_semidefinite(R, "R")
+    if Q.shape != (n, n) or R.shape != (m, m):
+        raise ValueError("Q and R dimensions are inconsistent with A/B")
     if ref.shape == (n,):
         ref = np.tile(ref, (horizon, 1))
-    if ref.shape != (horizon, n) or horizon <= 0:
-        raise ValueError("x_ref must have shape (horizon, n)")
+    if ref.shape != (horizon, n):
+        raise ValueError("x_ref must have shape (n,) or (horizon, n)")
+
+    lo = np.full(m, -np.inf) if u_lower is None else np.asarray(u_lower, dtype=float)
+    hi = np.full(m, np.inf) if u_upper is None else np.asarray(u_upper, dtype=float)
+    if lo.shape != (m,) or hi.shape != (m,) or np.any(lo > hi):
+        raise ValueError("u_lower/u_upper must match input dimension and satisfy lower <= upper")
+    bounded = u_lower is not None or u_upper is not None
+
     powers = [np.eye(n)]
     for _ in range(horizon):
         powers.append(A @ powers[-1])
     S = np.zeros((horizon * n, horizon * m))
     for i in range(horizon):
         for j in range(i + 1):
-            S[i*n:(i+1)*n, j*m:(j+1)*m] = powers[i-j] @ B
-    x_free = np.concatenate([powers[i+1] @ x for i in range(horizon)])
+            S[i * n:(i + 1) * n, j * m:(j + 1) * m] = powers[i - j] @ B
+    x_free = np.concatenate([powers[i + 1] @ x for i in range(horizon)])
     Qbar = np.kron(np.eye(horizon), Q)
     Rbar = np.kron(np.eye(horizon), R)
-    H = S.T @ Qbar @ S + Rbar + 1e-9 * np.eye(horizon * m)
+    H = S.T @ Qbar @ S + Rbar
+    H = 0.5 * (H + H.T) + 1e-10 * np.eye(horizon * m)
     g = S.T @ Qbar @ (x_free - ref.reshape(-1))
-    u = -np.linalg.solve(H, g).reshape(horizon, m)
-    if u_lower is not None or u_upper is not None:
-        lo = np.full(m, -np.inf) if u_lower is None else np.asarray(u_lower, dtype=float)
-        hi = np.full(m, np.inf) if u_upper is None else np.asarray(u_upper, dtype=float)
-        u = np.clip(u, lo, hi)
-    states = []
+
+    if not bounded:
+        u_vec = -np.linalg.solve(H, g)
+        iterations = 1
+        converged = True
+    else:
+        lipschitz = float(np.max(np.linalg.eigvalsh(H)))
+        step = 1.0 / max(lipschitz, 1e-12)
+        u_vec = np.clip(np.zeros(horizon * m), lo.repeat(horizon), hi.repeat(horizon))
+        converged = False
+        for iterations in range(1, max_iterations + 1):
+            gradient = H @ u_vec + g
+            updated = np.clip(u_vec - step * gradient, lo.repeat(horizon), hi.repeat(horizon))
+            if np.linalg.norm(updated - u_vec, ord=np.inf) <= tolerance:
+                u_vec = updated
+                converged = True
+                break
+            u_vec = updated
+
+    u = u_vec.reshape(horizon, m)
     cost = 0.0
     state = x.copy()
     for k in range(horizon):
-        e = state - ref[k]
-        cost += float(e @ Q @ e + u[k] @ R @ u[k])
-        states.append(state.copy())
+        error = state - ref[k]
+        cost += float(error @ Q @ error + u[k] @ R @ u[k])
         state = A @ state + B @ u[k]
-    return MPCResult(control=u[0].copy(), sequence=u, cost=cost)
+
+    return MPCResult(control=u[0].copy(), sequence=u, cost=cost, iterations=iterations, converged=converged)
