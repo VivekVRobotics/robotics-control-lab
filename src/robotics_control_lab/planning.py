@@ -1,8 +1,8 @@
 """Sampling-based and graph motion-planning primitives."""
 
-from dataclasses import dataclass
 import heapq
 import math
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -36,7 +36,13 @@ def _validate_bounds(bounds):
     return bounds
 
 
-def edge_collision_free(a: np.ndarray, b: np.ndarray, obstacles: list[CircleObstacle], step: float = 0.01) -> bool:
+def edge_collision_free(
+    a: np.ndarray,
+    b: np.ndarray,
+    obstacles: list[CircleObstacle],
+    step: float = 0.01,
+) -> bool:
+    """Return whether a straight-line edge avoids every obstacle."""
     a = np.asarray(a, dtype=float).reshape(2)
     b = np.asarray(b, dtype=float).reshape(2)
     if step <= 0 or not np.isfinite(step):
@@ -70,7 +76,17 @@ def _reconstruct(nodes: list[np.ndarray], parents: list[int], idx: int) -> np.nd
     return np.asarray(path[::-1])
 
 
-def rrt(start, goal, bounds, obstacles, *, iterations=2000, step_size=0.08, goal_bias=0.1, seed=0):
+def rrt(
+    start,
+    goal,
+    bounds,
+    obstacles,
+    *,
+    iterations=2000,
+    step_size=0.08,
+    goal_bias=0.1,
+    seed=0,
+):
     """Plan a collision-free 2D path with deterministic RRT sampling."""
     if iterations <= 0 or step_size <= 0 or not 0 <= goal_bias <= 1:
         raise ValueError("invalid RRT parameters")
@@ -81,7 +97,11 @@ def rrt(start, goal, bounds, obstacles, *, iterations=2000, step_size=0.08, goal
     nodes = [start]
     parents = [-1]
     for _ in range(iterations):
-        sample = goal if rng.random() < goal_bias else np.array([rng.uniform(*bounds[0]), rng.uniform(*bounds[1])])
+        sample = (
+            goal
+            if rng.random() < goal_bias
+            else np.array([rng.uniform(*bounds[0]), rng.uniform(*bounds[1])])
+        )
         nearest = int(np.argmin([np.linalg.norm(n - sample) for n in nodes]))
         direction = sample - nodes[nearest]
         norm = float(np.linalg.norm(direction))
@@ -101,7 +121,18 @@ def rrt(start, goal, bounds, obstacles, *, iterations=2000, step_size=0.08, goal
     return None
 
 
-def rrt_star(start, goal, bounds, obstacles, *, iterations=3000, step_size=0.08, neighbor_radius=0.2, goal_bias=0.05, seed=0):
+def rrt_star(
+    start,
+    goal,
+    bounds,
+    obstacles,
+    *,
+    iterations=3000,
+    step_size=0.08,
+    neighbor_radius=0.2,
+    goal_bias=0.05,
+    seed=0,
+):
     """Deterministic 2D RRT* with local rewiring and collision checking."""
     if iterations <= 0 or step_size <= 0 or neighbor_radius <= 0 or not 0 <= goal_bias <= 1:
         raise ValueError("invalid RRT* parameters")
@@ -114,7 +145,11 @@ def rrt_star(start, goal, bounds, obstacles, *, iterations=3000, step_size=0.08,
     costs = [0.0]
     best_goal: tuple[float, int] | None = None
     for _ in range(iterations):
-        sample = goal if rng.random() < goal_bias else np.array([rng.uniform(*bounds[0]), rng.uniform(*bounds[1])])
+        sample = (
+            goal
+            if rng.random() < goal_bias
+            else np.array([rng.uniform(*bounds[0]), rng.uniform(*bounds[1])])
+        )
         nearest = int(np.argmin([np.linalg.norm(n - sample) for n in nodes]))
         direction = sample - nodes[nearest]
         norm = float(np.linalg.norm(direction))
@@ -126,10 +161,16 @@ def rrt_star(start, goal, bounds, obstacles, *, iterations=3000, step_size=0.08,
         if not edge_collision_free(nodes[nearest], new, obstacles):
             continue
         near = [
-            i for i, node in enumerate(nodes)
-            if np.linalg.norm(node - new) <= neighbor_radius and edge_collision_free(node, new, obstacles)
+            i
+            for i, node in enumerate(nodes)
+            if np.linalg.norm(node - new) <= neighbor_radius
+            and edge_collision_free(node, new, obstacles)
         ]
-        parent = min(near, key=lambda i: costs[i] + np.linalg.norm(nodes[i] - new), default=nearest)
+        parent = min(
+            near,
+            key=lambda i: costs[i] + np.linalg.norm(nodes[i] - new),
+            default=nearest,
+        )
         new_cost = costs[parent] + float(np.linalg.norm(nodes[parent] - new))
         nodes.append(new)
         parents.append(parent)
@@ -155,7 +196,11 @@ def rrt_star(start, goal, bounds, obstacles, *, iterations=3000, step_size=0.08,
     return None if best_goal is None else _reconstruct(nodes, parents, best_goal[1])
 
 
-def astar(grid: np.ndarray, start: tuple[int, int], goal: tuple[int, int]) -> list[tuple[int, int]] | None:
+def astar(
+    grid: np.ndarray,
+    start: tuple[int, int],
+    goal: tuple[int, int],
+) -> list[tuple[int, int]] | None:
     """A* on a binary occupancy grid (0 free, nonzero occupied)."""
     grid = np.asarray(grid)
     if grid.ndim != 2 or grid.size == 0:
@@ -170,7 +215,16 @@ def astar(grid: np.ndarray, start: tuple[int, int], goal: tuple[int, int]) -> li
     frontier = [(0.0, start)]
     parent = {start: None}
     cost = {start: 0.0}
-    neighbors = [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)]
+    neighbors = [
+        (-1, 0),
+        (1, 0),
+        (0, -1),
+        (0, 1),
+        (-1, -1),
+        (-1, 1),
+        (1, -1),
+        (1, 1),
+    ]
     while frontier:
         _, current = heapq.heappop(frontier)
         if current == goal:
