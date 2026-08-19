@@ -18,7 +18,12 @@ def _validate_scalar(value: float, name: str) -> float:
     return value
 
 
-def cubic_interpolation(q0: float, qf: float, duration: float, dt: float = 0.01) -> list[tuple[float, float, float]]:
+def cubic_interpolation(
+    q0: float,
+    qf: float,
+    duration: float,
+    dt: float = 0.01,
+) -> list[tuple[float, float, float]]:
     """Return ``(time, position, velocity)`` samples with zero endpoint velocity."""
     q0 = _validate_scalar(q0, "q0")
     qf = _validate_scalar(qf, "qf")
@@ -37,7 +42,12 @@ def cubic_interpolation(q0: float, qf: float, duration: float, dt: float = 0.01)
     return result
 
 
-def quintic_interpolation(q0: float, qf: float, duration: float, dt: float = 0.01) -> list[tuple[float, float, float, float]]:
+def quintic_interpolation(
+    q0: float,
+    qf: float,
+    duration: float,
+    dt: float = 0.01,
+) -> list[tuple[float, float, float, float]]:
     """Return ``(time, position, velocity, acceleration)`` with zero endpoint v/a."""
     q0 = _validate_scalar(q0, "q0")
     qf = _validate_scalar(qf, "qf")
