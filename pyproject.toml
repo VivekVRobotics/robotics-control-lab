@@ -20,9 +20,13 @@ addopts = "--strict-markers"
 
 [tool.ruff]
 line-length = 120
+src = ["src"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["robotics_control_lab"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
