@@ -37,13 +37,17 @@ class LinearKalmanFilter:
                 raise ValueError(f"{name} must be symmetric")
             if np.min(np.linalg.eigvalsh(matrix)) < -1e-10:
                 raise ValueError(f"{name} must be positive semidefinite")
-        if np.linalg.cholesky(self.R + 1e-12 * np.eye(m)) is None:
-            raise ValueError("R must be positive semidefinite")
+        try:
+            np.linalg.cholesky(self.R + 1e-12 * np.eye(m))
+        except np.linalg.LinAlgError as exc:
+            raise ValueError("R must be positive definite enough for update") from exc
 
     def predict(self, u=None) -> KalmanState:
         u_vec = np.zeros(self.B.shape[1]) if u is None else np.asarray(u, dtype=float).reshape(-1)
         if u_vec.shape != (self.B.shape[1],):
             raise ValueError("input has incorrect dimension")
+        if not np.all(np.isfinite(u_vec)):
+            raise ValueError("input must contain finite values")
         self.x = self.A @ self.x + self.B @ u_vec
         self.P = self.A @ self.P @ self.A.T + self.Q
         self.P = 0.5 * (self.P + self.P.T)
@@ -53,6 +57,8 @@ class LinearKalmanFilter:
         z = np.asarray(z, dtype=float).reshape(-1)
         if z.shape != (self.H.shape[0],):
             raise ValueError("measurement has incorrect dimension")
+        if not np.all(np.isfinite(z)):
+            raise ValueError("measurement must contain finite values")
         innovation = z - self.H @ self.x
         S = self.H @ self.P @ self.H.T + self.R
         try:
@@ -60,9 +66,9 @@ class LinearKalmanFilter:
         except np.linalg.LinAlgError as exc:
             raise ValueError("innovation covariance is singular") from exc
         self.x = self.x + K @ innovation
-        I = np.eye(self.P.shape[0])
+        identity = np.eye(self.P.shape[0])
         # Joseph form preserves covariance symmetry/positive semidefiniteness better.
-        self.P = (I - K @ self.H) @ self.P @ (I - K @ self.H).T + K @ self.R @ K.T
+        self.P = (identity - K @ self.H) @ self.P @ (identity - K @ self.H).T + K @ self.R @ K.T
         self.P = 0.5 * (self.P + self.P.T)
         return KalmanState(self.x.copy(), self.P.copy())
 
