@@ -28,7 +28,12 @@ def so3_exp(phi: np.ndarray) -> np.ndarray:
 def so3_log(R: np.ndarray) -> np.ndarray:
     """Return a principal rotation vector, including the numerically difficult pi case."""
     R = np.asarray(R, dtype=float).reshape(3, 3)
-    if not np.all(np.isfinite(R)) or not np.allclose(R.T @ R, np.eye(3), atol=1e-7) or not np.isclose(np.linalg.det(R), 1.0, atol=1e-7):
+    valid_rotation = (
+        np.all(np.isfinite(R))
+        and np.allclose(R.T @ R, np.eye(3), atol=1e-7)
+        and np.isclose(np.linalg.det(R), 1.0, atol=1e-7)
+    )
+    if not valid_rotation:
         raise ValueError("R must be a valid rotation matrix")
 
     cos_theta = float(np.clip((np.trace(R) - 1.0) / 2.0, -1.0, 1.0))
@@ -56,16 +61,22 @@ def so3_log(R: np.ndarray) -> np.ndarray:
         axis /= np.linalg.norm(axis)
         return theta * axis
 
-    return theta / (2.0 * np.sin(theta)) * np.array(
+    skew_vector = np.array(
         [R[2, 1] - R[1, 2], R[0, 2] - R[2, 0], R[1, 0] - R[0, 1]],
         dtype=float,
     )
+    return theta / (2.0 * np.sin(theta)) * skew_vector
 
 
 def se3(R: np.ndarray, p: np.ndarray) -> np.ndarray:
     R = np.asarray(R, dtype=float).reshape(3, 3)
     p = np.asarray(p, dtype=float).reshape(3)
-    if not np.allclose(R.T @ R, np.eye(3), atol=1e-7) or not np.isclose(np.linalg.det(R), 1.0, atol=1e-7):
+    valid_rotation = (
+        np.all(np.isfinite(R))
+        and np.allclose(R.T @ R, np.eye(3), atol=1e-7)
+        and np.isclose(np.linalg.det(R), 1.0, atol=1e-7)
+    )
+    if not valid_rotation:
         raise ValueError("R must be a valid rotation matrix")
     if not np.all(np.isfinite(p)):
         raise ValueError("translation must contain finite values")
@@ -98,7 +109,9 @@ def twist_hat(V: np.ndarray) -> np.ndarray:
 
 def twist_vee(X: np.ndarray) -> np.ndarray:
     X = np.asarray(X, dtype=float).reshape(4, 4)
-    if not np.allclose(X[:3, :3] + X[:3, :3].T, 0.0, atol=1e-9) or not np.allclose(X[3], 0.0, atol=1e-12):
+    if not np.allclose(X[:3, :3] + X[:3, :3].T, 0.0, atol=1e-9):
+        raise ValueError("X is not a valid twist matrix")
+    if not np.allclose(X[3], 0.0, atol=1e-12):
         raise ValueError("X is not a valid twist matrix")
     w = np.array([X[2, 1], X[0, 2], X[1, 0]])
     return np.concatenate((w, X[:3, 3]))
@@ -106,8 +119,8 @@ def twist_vee(X: np.ndarray) -> np.ndarray:
 
 def se3_exp(V: np.ndarray, theta: float = 1.0) -> np.ndarray:
     V = np.asarray(V, dtype=float).reshape(6)
-    if not np.isfinite(theta):
-        raise ValueError("theta must be finite")
+    if not np.all(np.isfinite(V)) or not np.isfinite(theta):
+        raise ValueError("twist and theta must contain finite values")
     R = so3_exp(V[:3] * theta)
     w = V[:3]
     v = V[3:]
@@ -117,7 +130,11 @@ def se3_exp(V: np.ndarray, theta: float = 1.0) -> np.ndarray:
     else:
         W = skew(w)
         angle = wn * theta
-        A = np.eye(3) * theta + (1.0 - np.cos(angle)) / wn**2 * W + (angle - np.sin(angle)) / wn**3 * (W @ W)
+        A = (
+            np.eye(3) * theta
+            + (1.0 - np.cos(angle)) / wn**2 * W
+            + (angle - np.sin(angle)) / wn**3 * (W @ W)
+        )
         p = A @ v
     return se3(R, p)
 
